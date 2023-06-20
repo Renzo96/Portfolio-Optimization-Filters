@@ -4,6 +4,7 @@ import datetime as dt
 import yfinance as yf
 import numpy as np
 import collections
+import random
 
 
 
@@ -17,6 +18,20 @@ def down_stocks():
     stocks = componentes['Symbol'].tolist()
     data = yf.download(stocks, start, end)['Adj Close']
     return data
+
+def quick_stocks():
+    """Escrapea info de internet"""
+    n_stocks = int(input("Ingrese numero de acciones: "))
+    r = requests.get('https://en.wikipedia.org/wiki/List_of_S%26P_500_companies')
+    c = r.content
+    componentes = pd.read_html(c)[0]
+    start = dt.datetime(2015, 1, 1)
+    end= dt.datetime.now() - dt.timedelta(days=3)
+    stocks = componentes['Symbol'].tolist()
+    random_stocks = random.sample(stocks, n_stocks)
+    data = yf.download(random_stocks, start, end)['Adj Close']
+    return data
+
 
 class StockFilter:
     def __init__(self):
@@ -229,5 +244,40 @@ class StockFilterParticular:
 
         data = data.drop(columns=columns_to_drop)
         
-        return data
+        return data, stock_counts
+
+
+    def top_sector(self, data, stock_counts):
+        """Tomo lista de acciones y numero de filtros que pasaron y le append a que sector corresponde cada stock
+        despues elijo por cada sector las acciones que estan en el quantil 0.8 de la muestra basado en numero de filtros pasados
+        y drop de dataframe principal las acciones que no pasen esa resticcion"""
+        #Tomo acciones y filtros pasados como dataframe
+        df_count = pd.DataFrame.from_dict(stock_counts, orient='index', columns=['Number']).reset_index()
+        df_count.columns = ['Stock', 'Number']
+        #creo columna sector y descargo dato para agregar sector correspondiente
+        df_count['Sector'] = ''
+        for index, row in df_count.iterrows():
+            symbol = row['Stock']
+            ticker = yf.Ticker(symbol)
+            stock_info = ticker.info
+            sector = stock_info.get('sector')
+            # Update the 'Sector' column for the current row
+            df_count.loc[index, 'Sector'] = sector
+        #Creo lista con acciones que esten quantil 0.8 de cada sector en haber pasado filtros
+        new_list = []
+        sector_quantile = df_count.groupby('Sector')['Number'].quantile(0.8)
+        sector_quantile_df = sector_quantile.to_frame()
+        sector_quantile_df.reset_index(inplace=True)
+        sector_quantile_df.columns = ['Sector', 'Quantile_Number']
+        merged_df = df_count.merge(sector_quantile_df, on='Sector')
+        for index, row in merged_df.iterrows():
+            if row['Number'] > row['Quantile_Number']:
+                new_list.append(row['Stock'])
+        #Drop de dataframe de acciones principal todas las acciones que no hayan calificado
+        columns_to_drop = [col for col in data.columns if col not in new_list]
+        data = data.drop(columns=columns_to_drop)
+        #Creo otro df con acciones, sector, num filtros pasados y quantil.
+        data_sectors =  merged_df[merged_df['Stock'].isin(new_list)]
+        return data, data_sectors
+
 
