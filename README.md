@@ -1,5 +1,5 @@
 
-# Eficient Frontier
+# Efficient Frontier
 
 We are two people with backgrounds in economics and finance who wanted to try our hand at creating a python code to analize a list of stocks and obtain an eficient frontier portfolio.
 
